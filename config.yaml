@@ -1,0 +1,7 @@
+extractEN: True # scelgo con vero e falso se fare estrazione frame o split e scelta configurazione
+ExVideo: True # scelgo con vero e falso se usare il video di esempio o il mio personale
+nameVid: "" # inserire il nome del video personale
+target_fps: 1 # valore per il rating fps per raccogliere i frame
+              # 2 vuol dire voglio 2 frame al secondo
+              # 1 vuol dire voglio 1 frame al secondo
+              # 0.5 vuol dire voglio 1 frame ogni 2 secondi

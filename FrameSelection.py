@@ -114,6 +114,7 @@ def find_blurry(sharp, ratio, window):
             blurry[i] = True                           # lo segno come mosso
     return blurry                                      # array di True/False
 
+# aiutato da Claude 
 def compute_motion_db(names, db_path):
     # changes[i] = quanto cambia il frame i rispetto al frame i-1, usando i match già calcolati da COLMAP
     print("Leggo i match consecutivi dal database di COLMAP...")

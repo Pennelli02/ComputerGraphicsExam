@@ -5,3 +5,23 @@ target_fps: 1 # valore per il rating fps per raccogliere i frame
               # 2 vuol dire voglio 2 frame al secondo
               # 1 vuol dire voglio 1 frame al secondo
               # 0.5 vuol dire voglio 1 frame ogni 2 secondi
+
+# ---- parametri dello split (usati solo dopo COLMAP)
+colmap_images_bin: "sparse/images.bin" # modello binario esportato da COLMAP
+test_every: 8 # 12.5% del dataset è dedicata al testing (8 standard 3DGS)
+guard: 0 # frame esclusi dal training attorno a ogni test (0 = nessuno)
+motion_db: False # se true cerco le feature guardando nei file di colmap altrimenti fa la differenza tra immagini vicine
+blur_ratio: 0.7 # un frame è mosso se la sua nitidezza è sotto il 70% di quella dei vicini
+blur_window: 5 # quanti vicini per lato confronto
+
+experiments: # coppie [strategia, numero di frame] tutti gli esperimenti che farò
+  - [ baseline, null ]
+  - [ uniform, 100 ]
+  - [ uniform, 50 ]
+  - [ motion, 100 ]
+  - [ motion, 50 ]
+  - [ quality, null ]           # tutti meno i mossi: effetto del solo filtro
+  - [ quality, 100 ]
+  - [ quality, 50 ]
+  - [quality+motion, 100]
+  - [quality+motion, 50]

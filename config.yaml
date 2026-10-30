@@ -1,10 +1,14 @@
-extractEN: True # scelgo con vero e falso se fare estrazione frame o split e scelta configurazione
+extractEN: False # scelgo con vero e falso se fare estrazione frame o split e scelta configurazione
 ExVideo: True # scelgo con vero e falso se usare il video di esempio o il mio personale
 nameVid: "" # inserire il nome del video personale
 target_fps: 1 # valore per il rating fps per raccogliere i frame
               # 2 vuol dire voglio 2 frame al secondo
               # 1 vuol dire voglio 1 frame al secondo
               # 0.5 vuol dire voglio 1 frame ogni 2 secondi
+
+factor: 4 # fattore di scala
+enable_scaling: True # Vero o falso per attivare lo scaling e creare cartella per il parsing di gsplat
+overwrite: False # Vero o falso per indicare se vuoi riscrivere le immagini scalate
 
 # ---- parametri dello split (usati solo dopo COLMAP)
 colmap_images_bin: "sparse/images.bin" # modello binario esportato da COLMAP
@@ -13,6 +17,7 @@ guard: 0 # frame esclusi dal training attorno a ogni test (0 = nessuno)
 motion_db: False # se true cerco le feature guardando nei file di colmap altrimenti fa la differenza tra immagini vicine
 blur_ratio: 0.7 # un frame è mosso se la sua nitidezza è sotto il 70% di quella dei vicini
 blur_window: 5 # quanti vicini per lato confronto
+db_path: "db/truck 3dgs db.db" # modificato con il nome del path del db generato da colmap
 
 experiments: # coppie [strategia, numero di frame] tutti gli esperimenti che farò
   - [ baseline, null ]

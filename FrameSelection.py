@@ -67,28 +67,27 @@ def extract_frames(opts):
 #Funzioni Helper
 
 def get_names(opts, dir_path):
-    # Leggo i nomi dei frame registrati direttamente da images.bin di COLMAP
-    if os.path.exists(opts.colmap_images_bin):
-        names = []
-        with open(opts.colmap_images_bin, "rb") as f:
-            num_images = struct.unpack("<Q", f.read(8))[0]       # quante immagini ci sono (struct.unpack = trasforma dei byte letti da un file in un numero che Python può usare)
-            for _ in range(num_images):
-                f.read(4 + 8 * 4 + 8 * 3 + 4)                    # id, quaternione, traslazione, id camera salta i dati di un’immagine che non ci servono, per arrivare al nome del file.
-                name = b""
-                while True:                                      # il nome termina con un byte zero
-                    c = f.read(1)
-                    if c == b"\x00":
-                        break
-                    name += c
-                names.append(name.decode())
-                num_points = struct.unpack("<Q", f.read(8))[0]   # punti 2D di questa immagine
-                f.read(num_points * 24)                          # li salto (24 byte ciascuno)
-        names.sort()
-        print(f"Frame registrati da COLMAP: {len(names)}")
-    else:
-        names = sorted(os.listdir(dir_path))
-        print("ATTENZIONE: images.bin non trovato, uso tutti i frame in images/")
+    # Tutti i frame in images/, in ordine alfabetico (= ordine temporale)
+    names = sorted(f for f in os.listdir(dir_path) if f.endswith(".jpg"))
+    print(f"Frame trovati: {len(names)}")
     return names
+
+def check_colmap(opts, names):
+    # images.bin comincia con un numero: quante immagini ha registrato COLMAP
+    if not os.path.exists(opts.colmap_images_bin):
+        print("ATTENZIONE: images.bin non trovato, non posso controllare i frame")
+        return True                                            # non posso controllare, continuo
+
+    with open(opts.colmap_images_bin, "rb") as f:
+        registered = struct.unpack("<Q", f.read(8))[0]         # primi 8 byte = numero di immagini
+
+    if registered == len(names):
+        print(f"OK: COLMAP ha registrato tutti i {registered} frame")
+        return True
+
+    print(f"ERRORE: in images/ ci sono {len(names)} frame ma COLMAP ne ha registrati {registered}.")
+    print("Togli da images/ i frame non registrati oppure rifai la ricostruzione.")
+    return False
 
 def load_small(path, width):
     # Legge l'immagine in bianco e nero e la rimpicciolisce (i calcoli sono più veloci)
@@ -114,16 +113,18 @@ def find_blurry(sharp, ratio, window):
             blurry[i] = True                           # lo segno come mosso
     return blurry                                      # array di True/False
 
-# aiutato da Claude 
+# aiutato da Claude
 def compute_motion_db(names, db_path):
     # changes[i] = quanto cambia il frame i rispetto al frame i-1, usando i match già calcolati da COLMAP
     print("Leggo i match consecutivi dal database di COLMAP...")
+    if not os.path.exists(db_path):
+        raise FileNotFoundError(f"Database SQLite COLMAP non trovato in: {db_path}")
     con = sqlite3.connect(db_path)
 
     # id che COLMAP ha dato a ogni frame (dipende dal nome del file)
     ids = {}
     for image_id, name in con.execute("SELECT image_id, name FROM images"):
-        ids[name] = image_id
+        ids[os.path.basename(name)] = image_id
 
     M = 2147483647                       # costante che COLMAP usa per codificare una coppia di immagini in un solo numero
     matches = []
@@ -135,7 +136,7 @@ def compute_motion_db(names, db_path):
     con.close()
 
     matches = np.array(matches, dtype=float)
-    change = 1.0 - matches / matches.max()       # tanti match = poco cambiamento (0), pochi match = molto (vicino a 1)
+    change = 1.0 - (matches / matches.max())       # tanti match = poco cambiamento (0), pochi match = molto (vicino a 1)
     return np.concatenate([[0.0], change])       # il primo frame non ha un precedente
 
 def compute_motion_by_diff(names, dir_path, method):
@@ -169,6 +170,35 @@ def save_list(path, names):
         f.write("\n".join(names))       # unisco i nomi mettendo un "a capo" tra l'uno e l'altro -> un nome per riga
 
 
+def create_scaled_images(factor, overwrite: bool = False):
+    """Crea una directory images_{factor} con le immagini ridotte di `factor` volte (PNG)."""
+    if factor < 2:
+        raise ValueError("factor deve essere >= 2 (con factor=1 si usa direttamente 'images').")
+    src = os.path.join("images")
+    dst = os.path.join(f"images_{factor}")
+    if not os.path.isdir(src):
+        raise FileNotFoundError(f"Cartella sorgente non trovata: {src}")
+
+    os.makedirs(dst, exist_ok=True)
+    names = sorted(f for f in os.listdir(src) if f.lower().endswith((".jpg", ".jpeg", ".png")))
+    if not names:
+        raise RuntimeError(f"Nessuna immagine in {src}")
+
+    done = 0
+    for name in names:
+        out_path = os.path.join(dst, os.path.splitext(name)[0] + ".png")
+        if os.path.isfile(out_path) and not overwrite:
+            continue
+        img = cv.imread(os.path.join(src, name))
+        if img is None:
+            raise RuntimeError(f"Impossibile leggere {name}")
+        h, w = img.shape[:2]
+        small = cv.resize(img, (round(w / factor), round(h / factor)), interpolation=cv.INTER_AREA)
+        cv.imwrite(out_path, small)
+        done += 1
+
+    print(f"{dst}: {done} immagini create, {len(names)} totali in images/")
+
 #--------------------------------------------------------------
 # funzione split e frame selection
 
@@ -178,6 +208,8 @@ def split_frames(opts):
     os.makedirs(split_dir, exist_ok=True)     # la creo se non esiste
 
     names = get_names(opts, dir_path) # prendo il nome dalla cartella colmap però non so se ha senso controllare
+    if not check_colmap(opts, names):
+        return  # mi fermo: le liste sarebbero sbagliate
 
     test_idx = list(range(0, len(names), opts.test_every))   # posizioni 0, 7, 14, ... (con test_every = 7)
     candidates = []                                          # posizioni che possono andare nel training
@@ -201,7 +233,7 @@ def split_frames(opts):
     cum = None
     if any("motion" in strategy for strategy, n in opts.experiments):
         if opts.motion_db:
-            changes = compute_motion_db(names, dir_path)
+            changes = compute_motion_db(names, opts.db_path)
         else:
             changes = compute_motion_by_diff(names, dir_path, "differenza immagini")
         cum = np.cumsum(changes)  # movimento cumulato: sale veloce dove la scena cambia molto
@@ -213,6 +245,11 @@ def split_frames(opts):
                 print(f"Strategia sconosciuta: {strategy}")
                 return                                 # errore di battitura nel config: mi fermo
 
+                # Senza N hanno senso solo "baseline" e "quality" (tutti i frame meno i mossi)
+        if n is None and strategy not in ["baseline", "quality"]:
+            print(f"[{strategy}] senza N equivale alla baseline: salto")
+            continue
+
         pos = candidates  # parto da tutti i candidati
         if "quality" in strategy:
             pos = pos[~blurry[pos]]  # tolgo quelli segnati come mossi
@@ -220,6 +257,9 @@ def split_frames(opts):
         if strategy == "baseline":
             chosen = pos                               # baseline: tutti i frame utili
             tag = "baseline"
+        elif n is None:  # qui ci arriva solo "quality"
+            chosen = pos  # tutti i candidati meno i mossi
+            tag = "quality_all"
         else:
             if n > len(pos):                           # N più grande dei frame disponibili: impossibile
                 print(f"[{strategy}] servono {n} frame ma ce ne sono {len(pos)}: salto")
@@ -231,22 +271,24 @@ def split_frames(opts):
             chosen = pos[pick_equispaced(values, n)]   # scelgo n frame equidistanti sulla curva
             tag = f"{strategy}_N{n}".replace("+", "_") # nome del file, es. "motion_N50"
 
-            save_list(os.path.join(split_dir, f"train_{tag}.txt"),
+        save_list(os.path.join(split_dir, f"train_{tag}.txt"),
                       [names[i] for i in chosen])  # scrivo i nomi in splits/train_<tag>.txt
 
-            gaps = np.diff(chosen)  # differenze tra posizioni consecutive = distanze tra frame scelti
-            summary.append((tag, len(chosen), gaps.min(), gaps.mean(), gaps.max(),
+        gaps = np.diff(chosen)  # differenze tra posizioni consecutive = distanze tra frame scelti
+        summary.append((tag, len(chosen), gaps.min(), gaps.mean(), gaps.max(),
                             sharp[chosen].mean(), int(blurry[chosen].sum())))
 
-            # --- 4. RIEPILOGO
-            print("\nconfigurazione      frame   distanza min/media/max   nitidezza   mossi")
-            for tag, count, gmin, gmean, gmax, sh, nblur in summary:
-                print(f"{tag:<20}{count:>5}   {gmin:>6}/{gmean:>5.1f}/{gmax:>4}   {sh:>10.1f}   {nblur:>5}")
+    # --- 4. RIEPILOGO
+    print("\nconfigurazione      frame   distanza min/media/max   nitidezza   mossi")
+    for tag, count, gmin, gmean, gmax, sh, nblur in summary:
+        print(f"{tag:<20}{count:>5}   {gmin:>6}/{gmean:>5.1f}/{gmax:>4}   {sh:>10.1f}   {nblur:>5}")
 
 
 def main(opts):
     if opts.extractEN:
         extract_frames(opts)
+        if opts.enable_scaling:
+            create_scaled_images(opts.factor, opts.overwrite)
     else:
         split_frames(opts)
 

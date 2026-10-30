@@ -298,5 +298,5 @@ if __name__ == '__main__':
     opts = yaml.load(open(parser.parse_args().config), Loader=yaml.Loader)
     opts = SimpleNamespace(**opts)
 
-
+    #create_scaled_images(opts.factor, opts.overwrite)
     main(opts)

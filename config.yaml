@@ -21,12 +21,16 @@ db_path: "db/truck 3dgs db.db" # modificato con il nome del path del db generato
 
 experiments: # coppie [strategia, numero di frame] tutti gli esperimenti che farò
   - [ baseline, null ]
+  - [ uniform, 150 ]
   - [ uniform, 100 ]
   - [ uniform, 50 ]
+  - [ motion, 150 ]
   - [ motion, 100 ]
   - [ motion, 50 ]
   - [ quality, null ]           # tutti meno i mossi: effetto del solo filtro
+  - [ quality, 150 ]
   - [ quality, 100 ]
   - [ quality, 50 ]
+  - [ quality+motion, 150 ]
   - [quality+motion, 100]
   - [quality+motion, 50]
